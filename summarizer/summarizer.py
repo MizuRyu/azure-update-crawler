@@ -14,7 +14,7 @@ SYSTEM_PROMPT = """
 - 必ず日本語で回答してください。
 - 各アップデート内容に関連するワークロード（Infra / App / Data / AI）を特定し、出力してください。
 - 以下の構造で出力してください：
-"date": アップデートの日付（yyyy/mm/dd形式）
+"date": アップデートの日付（yyyy/mm/dd形式）※yyyyの指定がなければ2024としてください。
 "category": 関連するワークロード（Infra / App / Data / AI）
 "title": アップデートのタイトル
 "url": アップデートのURL
