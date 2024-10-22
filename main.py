@@ -1,6 +1,7 @@
 import argparse
 import os
 import yaml
+import json
 import logging
 
 from dotenv import load_dotenv
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from crawler.crawler import WebCrawler
 from differ.differ import ContentDiffer
 from summarizer.summarizer import ContentSummarizer
+from parsers.parser_factory import ParserFactory
 from utils.logger import get_logger
 
 load_dotenv()
@@ -39,7 +41,7 @@ def main():
     config = load_config()
     ensure_directories()
 
-    urls = config.get('urls', [])
+    targets = config.get('targets', [])
 
     aoai_api_endpoint = os.getenv('AZURE_OPENAI_API_ENDPOINT')
     aoai_api_key = os.getenv('AZURE_OPENAI_API_KEY')
@@ -49,8 +51,13 @@ def main():
     summarizer = ContentSummarizer(api_key=aoai_api_key, endpoint=aoai_api_endpoint, deployment_name=deployment_name)
     summarizer.deployment_name = deployment_name
 
-    for url in urls:
-        logger.info(f"{url}のクロールを開始します")
+    for key, target in targets.items():
+        url = target.get('url')
+        parser_name = target.get('parser')
+        logging.info(f"target: {key} {url}のクロールを開始します")
+
+        # パーサーの取得
+        parser =ParserFactory.get_parser(parser_name)
         
         filename = url.replace('https://', '').replace('http://', '').replace('/', '_').replace(':', '_')
         prev_path = f'data/previous/{filename}.txt'
@@ -59,30 +66,30 @@ def main():
         # 前回のコンテンツがあれば、取得
         if os.path.exists(prev_path):
             with open(prev_path, 'r', encoding='utf-8') as f:
-                prev_content = f.read()
+                prev_content = json.load(f)
         else:
-            prev_content = ''
+            prev_content = []
 
         try:
             html = crawler.fetch_content(url)
-            current_content = crawler.parse_content(html)
+            current_content = parser.parse(html)
         except Exception as e:
             logger.error(f"{url}のクロールに失敗しました。")
             logger.error(e)
             continue
         
         with open(current_path, 'w', encoding='utf-8') as f:
-            f.write(current_content)
+            json.dump(current_content, f, ensure_ascii=False, indent=2)
         
         # 差分チェック
         differ = ContentDiffer(prev_content, current_content)
         if differ.has_changes():
-            diff_text = differ.get_diff()
+            diff_data = differ.get_diff()
 
             # 要約
             try:
-                pass
-                summary = summarizer.summarize(diff_text)
+                # pass
+                summary = summarizer.summarize(diff_data)
                 logging.info(f"{url}の要約: {summary}")
             except Exception as e:
                 logger.error(f"{url}の要約に失敗しました。")
@@ -93,7 +100,7 @@ def main():
 
         # 前回のコンテンツを更新
         with open(prev_path, 'w', encoding='utf-8') as f:
-            f.write(current_content)
+            json.dump(current_content, f, ensure_ascii=False, indent=2)
 
 if __name__ == '__main__':
     main()
